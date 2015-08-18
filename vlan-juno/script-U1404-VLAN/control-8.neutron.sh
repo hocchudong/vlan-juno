@@ -78,6 +78,8 @@ service_provider=VPN:openswan:neutron.services.vpn.service_drivers.ipsec.IPsecVP
 
 EOF
 
+su -s /bin/sh -c "neutron-db-manage --config-file /etc/neutron/neutron.conf \
+--config-file /etc/neutron/plugins/ml2/ml2_conf.ini upgrade juno" neutron
 
 ######## SAO LUU CAU HINH ML2 CHO $CON_MGNT_IP##################"
 echo "########## SUA FILE CAU HINH  ML2 CHO $CON_MGNT_IP ##########"
