@@ -3,6 +3,15 @@
 
 source config.cfg
 
+echo "########## TAO FILE CHO BIEN MOI TRUONG ##########"
+sleep 5
+echo "export OS_USERNAME=admin" > admin-openrc.sh
+echo "export OS_PASSWORD=$ADMIN_PASS" >> admin-openrc.sh
+echo "export OS_TENANT_NAME=admin" >> admin-openrc.sh
+echo "export OS_AUTH_URL=http://$CON_MGNT_IP:35357/v2.0" >> admin-openrc.sh
+
+source admin-openrc.sh
+SERVICE_ID=`keystone tenant-get service | awk '$2~/^id/{print $4}'`
 
 iphost=/etc/hosts
 test -f $iphost.orig || cp $iphost $iphost.orig
@@ -12,19 +21,10 @@ cat << EOF >> $iphost
 127.0.0.1       localhost
 $CON_MGNT_IP    $HOST_NAME
 $COM1_MGNT_IP      compute1
-127.0.0.1        compute1
+127.0.0.1        compute2
 $COM2_MGNT_IP      compute2
-$NET_MGNT_IP     network
 EOF
 
-# Cai dat repos va update
-
-# apt-get install -y python-software-properties &&  add-apt-repository cloud-archive:icehouse -y 
-# apt-get update && apt-get -y upgrade && apt-get -y dist-upgrade 
-
-apt-get update -y
-apt-get upgrade -y
-apt-get dist-upgrade -y
 
 ########
 echo "############ Cai dat NTP ############"
@@ -34,7 +34,7 @@ apt-get install ntp -y
 apt-get install python-mysqldb -y
 
 # Cai cac goi can thiet cho compute 
-apt-get install nova-compute-kvm python-guestfs -y
+apt-get install nova-compute-kvm python-guestfs sysfsutils -y
 apt-get install libguestfs-tools -y
 
 ########
@@ -79,35 +79,37 @@ test -f $filenova.orig || cp $filenova $filenova.orig
 #Chen noi dung file /etc/nova/nova.conf vao 
 cat << EOF > $filenova
 [DEFAULT]
+verbose = True
 
-# Cau hinh ket noi voi neutron
-network_api_class = nova.network.neutronv2.api.API
-neutron_url = http://$CON_MGNT_IP:9696
-neutron_auth_strategy = keystone
-neutron_admin_tenant_name = service
-neutron_admin_username = neutron
-neutron_admin_password = $ADMIN_PASS
-neutron_admin_auth_url = http://$CON_MGNT_IP:35357/v2.0
-
-linuxnet_interface_driver = nova.network.linux_net.LinuxOVSInterfaceDriver
-firewall_driver = nova.virt.firewall.NoopFirewallDriver
-security_group_api = neutron
 dhcpbridge_flagfile=/etc/nova/nova.conf
 dhcpbridge=/usr/bin/nova-dhcpbridge
 logdir=/var/log/nova
 state_path=/var/lib/nova
 lock_path=/var/lock/nova
 force_dhcp_release=True
-iscsi_helper=tgtadm
 libvirt_use_virtio_for_bridges=True
-connection_type=libvirt
-root_helper=sudo nova-rootwrap /etc/nova/rootwrap.conf
 verbose=True
 ec2_private_dns_show_ip=True
 api_paste_config=/etc/nova/api-paste.ini
-volumes_path=/var/lib/nova/volumes
 enabled_apis=ec2,osapi_compute,metadata
+
+# Khai bao cho RABBITMQ
+rpc_backend = rabbit
+rabbit_host = $CON_MGNT_IP
+rabbit_password = $RABBIT_PASS
+
 auth_strategy = keystone
+
+# Cau hinh cho VNC
+my_ip = $COM2_MGNT_IP
+vncserver_listen = 0.0.0.0
+vncserver_proxyclient_address = $COM2_MGNT_IP
+
+network_api_class = nova.network.neutronv2.api.API
+security_group_api = neutron
+linuxnet_interface_driver = nova.network.linux_net.LinuxOVSInterfaceDriver
+firewall_driver = nova.virt.firewall.NoopFirewallDriver
+
 
 # Tu dong Start VM khi reboot OpenStack
 resume_guests_state_on_host_boot=True
@@ -118,32 +120,28 @@ enable_instance_password = True
 libvirt_inject_key = true
 libvirt_inject_partition = -1
 
-# Cau hinh RABBIT
-rpc_backend = rabbit
-rabbit_host = $CON_MGNT_IP
-rabbit_password = $ADMIN_PASS
+[neutron]
+url = http://$CON_MGNT_IP:9696
+admin_auth_url = http://$CON_MGNT_IP:35357/v2.0
+admin_tenant_name = service
+admin_username = neutron
+admin_password = $NEUTRON_PASS
+service_metadata_proxy = True
+metadata_proxy_shared_secret = $METADATA_SECRET
 
-# Cau hinh VNC
-my_ip = $COM2_MGNT_IP
-vnc_enabled = True
-vncserver_listen = 0.0.0.0
-vncserver_proxyclient_address = $COM2_MGNT_IP
-novncproxy_base_url = http://$CON_MGNT_IP:6080/vnc_auto.html
-glance_host = $CON_MGNT_IP
-neutron_metadata_proxy_shared_secret=$ADMIN_PASS
+
+[glance]
+host = $CON_MGNT_IP
 
 [database]
-
-connection = mysql://nova:$MYSQL_PASS@$CON_MGNT_IP/nova
+connection = mysql://nova:$NOVA_DBPASS@$CON_MGNT_IP/nova
 
 [keystone_authtoken]
-auth_uri = http://$CON_MGNT_IP:5000
-auth_host = $CON_MGNT_IP
-auth_port = 35357
-auth_protocol = http
+auth_uri = http://$CON_MGNT_IP:5000/v2.0
+identity_uri = http://$CON_MGNT_IP:35357
 admin_tenant_name = service
 admin_user = nova
-admin_password = $ADMIN_PASS
+admin_password = $NOVA_PASS
 
 
 EOF
@@ -179,17 +177,26 @@ cat << EOF > $comfileneutron
 [DEFAULT]
 state_path = /var/lib/neutron
 lock_path = \$state_path/lock
-core_plugin = neutron.plugins.ml2.plugin.Ml2Plugin
-service_plugins = neutron.services.l3_router.l3_router_plugin.L3RouterPlugin
-auth_strategy = keystone
-dhcp_agent_notification = True
-rpc_backend = neutron.openstack.common.rpc.impl_kombu
-control_exchange = neutron
+
+core_plugin = ml2
+service_plugins = router
+allow_overlapping_ips = True
+
+rpc_backend = rabbit
 rabbit_host = $CON_MGNT_IP
-rabbit_password = Welcome123
-rabbit_port = 5672
-rabbit_userid = guest
-notification_driver = neutron.openstack.common.notifier.rpc_notifier
+rabbit_password = $RABBIT_PASS
+
+auth_strategy = keystone
+
+notify_nova_on_port_status_changes = True
+notify_nova_on_port_data_changes = True
+nova_url = http://$CON_MGNT_IP:8774/v2
+nova_admin_auth_url = http://$CON_MGNT_IP:35357/v2.0
+nova_region_name = regionOne
+nova_admin_username = nova
+nova_admin_tenant_id = $SERVICE_ID
+nova_admin_password = $NOVA_PASS
+
 
 [quotas]
 
@@ -197,17 +204,18 @@ notification_driver = neutron.openstack.common.notifier.rpc_notifier
 root_helper = sudo /usr/bin/neutron-rootwrap /etc/neutron/rootwrap.conf
 
 [keystone_authtoken]
-auth_host = $CON_MGNT_IP
-auth_port = 35357
-auth_protocol = http
+auth_uri = http://$CON_MGNT_IP:5000/v2.0
+identity_uri = http://$CON_MGNT_IP:35357
 admin_tenant_name = service
 admin_user = neutron
-admin_password = Welcome123
-signing_dir = \$state_path/keystone-signing
+admin_password = $NEUTRON_PASS
 
 [database]
+connection = mysql://neutron:$NEUTRON_DBPASS@$CON_MGNT_IP/neutron
 
 [service_providers]
+service_provider=LOADBALANCER:Haproxy:neutron.services.loadbalancer.drivers.haproxy.plugin_driver.HaproxyOnHostPluginDriver:default
+service_provider=VPN:openswan:neutron.services.vpn.service_drivers.ipsec.IPsecVPNDriver:default
 
 EOF
 #
@@ -242,7 +250,8 @@ firewall_driver = neutron.agent.linux.iptables_firewall.OVSHybridIptablesFirewal
 
 [ovs]
 tenant_network_type = vlan
-bridge_mappings = physnet1:br-em2,physnet2:br-em3
+bridge_mappings = physnet1:br-eth1,physnet2:br-eth2
+
 
 EOF
 
@@ -258,13 +267,13 @@ service openvswitch-switch restart
 echo "############ Tao integration bridge ############"
 sleep 5
 ########
-# Tao integration bridge
+# Add them cac port cho OVS
 ovs-vsctl add-br br-int 
-ovs-vsctl add-br br-em2
-ovs-vsctl add-port br-em2 em2
+ovs-vsctl add-br br-eth1
+ovs-vsctl add-port br-eth1 eth1
 
-ovs-vsctl add-br br-em3
-ovs-vsctl add-port br-em3 em3
+ovs-vsctl add-br br-eth2
+ovs-vsctl add-port br-eth2 eth2
 
 # fix loi libvirtError: internal error: no supported architecture for os type 'hvm'
 echo 'kvm_intel' >> /etc/modules
@@ -285,13 +294,6 @@ sleep 5
 # Khoi dong lai Openvswitch agent
 service neutron-plugin-openvswitch-agent restart
 service neutron-plugin-openvswitch-agent restart
-
-echo "########## TAO FILE CHO BIEN MOI TRUONG ##########"
-sleep 5
-echo "export OS_USERNAME=admin" > admin-openrc.sh
-echo "export OS_PASSWORD=$ADMIN_PASS" >> admin-openrc.sh
-echo "export OS_TENANT_NAME=admin" >> admin-openrc.sh
-echo "export OS_AUTH_URL=http://$HOST_NAME:35357/v2.0" >> admin-openrc.sh
 
 ########
 echo "############ KIEM TRA LAI NOVA va NEUTRON ############"
