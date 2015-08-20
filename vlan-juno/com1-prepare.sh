@@ -2,7 +2,6 @@
 #
 
 source config.cfg
-SERVICE_ID=`keystone tenant-get service | awk '$2~/^id/{print $4}'`
 
 echo "########## TAO FILE CHO BIEN MOI TRUONG ##########"
 sleep 5
@@ -11,6 +10,8 @@ echo "export OS_PASSWORD=$ADMIN_PASS" >> admin-openrc.sh
 echo "export OS_TENANT_NAME=admin" >> admin-openrc.sh
 echo "export OS_AUTH_URL=http://$CON_MGNT_IP:35357/v2.0" >> admin-openrc.sh
 
+source admin-openrc.sh
+SERVICE_ID=`keystone tenant-get service | awk '$2~/^id/{print $4}'`
 
 iphost=/etc/hosts
 test -f $iphost.orig || cp $iphost $iphost.orig
