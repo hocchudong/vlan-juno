@@ -104,6 +104,7 @@ auth_strategy = keystone
 my_ip = $COM2_MGNT_IP
 vncserver_listen = 0.0.0.0
 vncserver_proxyclient_address = $COM2_MGNT_IP
+novncproxy_base_url = http://$CON_MGNT_IP:6080/vnc_auto.html
 
 network_api_class = nova.network.neutronv2.api.API
 security_group_api = neutron
