@@ -2,6 +2,14 @@
 #
 
 source config.cfg
+SERVICE_ID=`keystone tenant-get service | awk '$2~/^id/{print $4}'`
+
+echo "########## TAO FILE CHO BIEN MOI TRUONG ##########"
+sleep 5
+echo "export OS_USERNAME=admin" > admin-openrc.sh
+echo "export OS_PASSWORD=$ADMIN_PASS" >> admin-openrc.sh
+echo "export OS_TENANT_NAME=admin" >> admin-openrc.sh
+echo "export OS_AUTH_URL=http://$CON_MGNT_IP:35357/v2.0" >> admin-openrc.sh
 
 
 iphost=/etc/hosts
@@ -24,7 +32,7 @@ apt-get install ntp -y
 apt-get install python-mysqldb -y
 
 # Cai cac goi can thiet cho compute 
-apt-get install nova-compute-kvm python-guestfs -y
+apt-get install nova-compute-kvm python-guestfs sysfsutils -y
 apt-get install libguestfs-tools -y
 
 ########
@@ -92,7 +100,7 @@ auth_strategy = keystone
 
 # Cau hinh cho VNC
 my_ip = $COM1_MGNT_IP
-vncserver_listen = $CON_MGNT_IP
+vncserver_listen = 0.0.0.0
 vncserver_proxyclient_address = $COM1_MGNT_IP
 
 network_api_class = nova.network.neutronv2.api.API
@@ -112,7 +120,6 @@ libvirt_inject_partition = -1
 
 [neutron]
 url = http://$CON_MGNT_IP:9696
-auth_strategy = keystone
 admin_auth_url = http://$CON_MGNT_IP:35357/v2.0
 admin_tenant_name = service
 admin_username = neutron
@@ -185,7 +192,7 @@ nova_url = http://$CON_MGNT_IP:8774/v2
 nova_admin_auth_url = http://$CON_MGNT_IP:35357/v2.0
 nova_region_name = regionOne
 nova_admin_username = nova
-nova_admin_tenant_id = $SERVICE_TENANT_ID
+nova_admin_tenant_id = $SERVICE_ID
 nova_admin_password = $NOVA_PASS
 
 
@@ -285,13 +292,6 @@ sleep 5
 # Khoi dong lai Openvswitch agent
 service neutron-plugin-openvswitch-agent restart
 service neutron-plugin-openvswitch-agent restart
-
-echo "########## TAO FILE CHO BIEN MOI TRUONG ##########"
-sleep 5
-echo "export OS_USERNAME=admin" > admin-openrc.sh
-echo "export OS_PASSWORD=$ADMIN_PASS" >> admin-openrc.sh
-echo "export OS_TENANT_NAME=admin" >> admin-openrc.sh
-echo "export OS_AUTH_URL=http://$HOST_NAME:35357/v2.0" >> admin-openrc.sh
 
 ########
 echo "############ KIEM TRA LAI NOVA va NEUTRON ############"
