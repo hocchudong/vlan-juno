@@ -2,10 +2,44 @@
 
 source config.cfg
 
+#Update for Ubuntu
+apt-get -y install ubuntu-cloud-keyring
+echo "deb http://ubuntu-cloud.archive.canonical.com/ubuntu" \
+"trusty-updates/juno main" > /etc/apt/sources.list.d/cloudarchive-juno.list
+
+apt-get update -y && apt-get upgrade -y && apt-get dist-upgrade -y
+
+echo "##### Configuring hostname for COMPUTE2 node... #####"
+sleep 3
+
+
 echo "Cau hinh hostname cho COMPUTE2 NODE"
 sleep 3
 echo "compute2" > /etc/hostname
 hostname -F /etc/hostname
+
+apt-get install ntp -y
+apt-get install python-mysqldb -y
+#
+echo "##### Backup NTP configuration... ##### "
+sleep 7 
+cp /etc/ntp.conf /etc/ntp.conf.bka
+rm /etc/ntp.conf
+cat /etc/ntp.conf.bka | grep -v ^# | grep -v ^$ >> /etc/ntp.conf
+#
+sed -i 's/server 0.ubuntu.pool.ntp.org/ \
+#server 0.ubuntu.pool.ntp.org/g' /etc/ntp.conf
+
+sed -i 's/server 1.ubuntu.pool.ntp.org/ \
+#server 1.ubuntu.pool.ntp.org/g' /etc/ntp.conf
+
+sed -i 's/server 2.ubuntu.pool.ntp.org/ \
+#server 2.ubuntu.pool.ntp.org/g' /etc/ntp.conf
+
+sed -i 's/server 3.ubuntu.pool.ntp.org/ \
+#server 3.ubuntu.pool.ntp.org/g' /etc/ntp.conf
+
+sed -i "s/server ntp.ubuntu.com/server $CON_MGNT_IP iburst/g" /etc/ntp.conf
 
 
 ifaces=/etc/network/interfaces
@@ -20,8 +54,8 @@ auto lo
 iface lo inet loopback
 
 # MGNT NETWORK
-auto em1
-iface em1 inet static
+auto eth0
+iface eth0 inet static
 address $COM2_MGNT_IP
 netmask $NETMASK_ADD
 gateway $GATEWAY_IP
@@ -29,15 +63,15 @@ dns-nameservers 8.8.8.8
 
 
 # VLANs NETWORK
-auto em2
-iface em2 inet manual
+auto eth1
+iface eth1 inet manual
 up ifconfig \$IFACE 0.0.0.0 up
 up ip link set \$IFACE promisc on
 down ifconfig \$IFACE 0.0.0.0 down
 
 # VLAN DATA NETWORK
-auto em3
-iface em3 inet manual
+auto eth2
+iface eth2 inet manual
 up ifconfig \$IFACE 0.0.0.0 up
 up ip link set \$IFACE promisc on
 down ifconfig \$IFACE 0.0.0.0 down
@@ -48,7 +82,7 @@ EOF
 #service networking restart
 
 #service networking restart
-# ifdown em1 && ifup em1
+# ifdown eth0 && ifup eth0
 # ifdown em2 && ifup em2
 # ifdown eth2 && ifup eth2
 
@@ -56,7 +90,6 @@ EOF
 
 init 6
 #
-
 
 
 
