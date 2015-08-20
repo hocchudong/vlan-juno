@@ -53,7 +53,7 @@ nova_url = http://$CON_MGNT_IP:8774/v2
 nova_admin_auth_url = http://$CON_MGNT_IP:35357/v2.0
 nova_region_name = regionOne
 nova_admin_username = nova
-nova_admin_tenant_id = $SERVICE_TENANT_ID
+nova_admin_tenant_id = $SERVICE_ID
 nova_admin_password = $NOVA_PASS
 
 
